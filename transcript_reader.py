@@ -8,8 +8,10 @@ import math
 
 smillis = int(round(time.time() * 1000))
 
+# Create a global to hold the requests
 smart_requests = []
 
+# Simple progress bar output to IDE console
 def update_progress(progress, text):
     barLength = 20 # Modify this to change the length of the progress bar
     status = ""
@@ -29,19 +31,21 @@ def update_progress(progress, text):
     sys.stdout.write(text)
     sys.stdout.flush()
 
+# Writes csvs
 def csv_writer(data, path):
     with open(path, "w", newline="\n") as f:
         writer = csv.writer(f)
         for i in data:
             writer.writerow(i)
 
-
+# uses openpyxl to read the transcripts
 def load_transcripts(excel_file):
     print("loading " + excel_file)
     wb = load_workbook(filename = excel_file, read_only=True)
     print("loading complete")
     sheet_names = wb.get_sheet_names()
     converted_transcripts = []
+    # read each of the sheets in the xlsx
     for sheet in sheet_names:
         ws = wb[sheet]
         sheet_length = ws._max_row
@@ -52,23 +56,27 @@ def load_transcripts(excel_file):
             for cell in row:
                 if cell.value != None:
                     temp_row.append(cell.value)
+            # find only the important iformation save it
             if len(temp_row) > 3 and temp_row[0] != 'Year' and temp_row[0] != "Fed Ethnicity & Race: "\
                     and not re.search('ALGEBRA I|BIOLOGY|ENGLISH I|ENGLISH II|US HISTORY', temp_row[0]):
                 converted_transcripts.append(temp_row)
-            # if i % 100 == 0:
-            #     progress = "\r" + 'Converting transcripts on '+ sheet + '... ' + str(int(i/sheet_length * 100 + 1)) + '%'
-            #     sys.stdout.write(progress)
-            #     sys.stdout.flush()
             update_progress(i/sheet_length, "Converting transcripts on " + sheet)
     return converted_transcripts
 
+# Checks to see if there is a valid id and returns it
 def get_id(row):
     return row[1].split()[2]
+ 
+# Gets the name of the student
 def get_name(row):
     return row[0]
+
+# a lot of stuff to parse the credit and grade
 def get_course_credit_and_grade(row):
     row[:] = [x for x in row if x != ' ' and x not in ['10/11' '11/12', '12/13', '13/14', '14/15', '15/16']]
+    # catches index errors
     try:
+        # a 'Q' indicates a PreAP class
         if 'Q' in row[0].replace(" ","").split(':')[1]:
             going_to_return = [row[0].replace(" ","").split(':')[0] + "PreAP", row[2][0:3], row[1].replace(' ', "")]
         else:
@@ -87,22 +95,16 @@ def parse_transcripts(transcripts):
         j +=  1
         if type(row[1]) is str and re.search('Student No: ', row[1]):
             student_index += 1 # updates the student index
-            # print('found new student')
             all_students.append([get_id(row), get_name(row)]) # puts the id in slot 0, name in slot 1
         if len(row) == 5:
-            # if str(row[4])[:3] != '0.0':
             all_students[student_index].append(get_course_credit_and_grade(row)) # gives course and credit to student
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!  uncomment if and indent all_students... to fix change
         update_progress(j/max, "Parsing transcripts")
     return all_students
 
+# Finds all of the unique courses, does not count frequency
 def find_unique(list):
     uniques = []
-    # for row in list:
-    #     for column in row:
-    #         if len(column) == 2 and column[0] not in uniques:
-    #             uniques.append(column[0])
-    # print(len(uniques), " courses")
     unique_dict = {}
     for row in list:
         for column in row:
@@ -115,6 +117,7 @@ def find_unique(list):
     # csv_writer(uniques, 'unique_classes.csv')
     return uniques
 
+# counts how much credit each student has. Written after the other reading functions were done, so not as effient as getting it directly from the transcripts
 def count_credit_earned(transcripts, uniques):
     credit_counter = {}
     for course in uniques:
@@ -127,6 +130,7 @@ def count_credit_earned(transcripts, uniques):
     # print(credit_counter['ALG1A'], " students have credit for Alg 1 A")
     return credit_counter, len(transcripts)
 
+# Creates course requests in the format required for the third party program ScheduleSmart
 def course_requests(classes, transcripts, uniques, class_size):
     credit_dict, kids = count_credit_earned(transcripts, uniques)
     requests = []
@@ -144,11 +148,10 @@ def course_requests(classes, transcripts, uniques, class_size):
 section_predictor = ['ALG1A', 'GEOMA', 'error', 'ALG2A', 'PRECALCA', 'ENG1A', 'ENG2A', 'ENG3A', 'ENG4A', 'BIOA',
                      'CHEMA', 'PHYSICSA', 'WGEOA', 'WHISTB', 'USHISTA']
 
+
 def course_requests(transcripts, department_courses):
     ss_index = 0
     schedule_smart_crs = []
-    # transcripts = load_transcripts(excel_file)
-    # student_credit_list = parse_transcripts(transcripts)
     for student in transcripts:
         course_index = 2
         temp_student_index = 0
@@ -165,8 +168,6 @@ def course_requests(transcripts, department_courses):
                         break
             course_index += 1
         ss_index += 1
-    # for item in schedule_smart_crs:
-    #     print(item)
     return schedule_smart_crs
 
 
@@ -200,6 +201,7 @@ def calc_credits(kid):
 
 # need to add more courses
 # group unaccounted for credits at the end
+# this function makes a file for mail merging into the district's graduation plan word doc
 def compute_grad_requirements(transcripts):
     all_kids = []
     unique_courses = find_unique(transcripts)
@@ -234,14 +236,6 @@ def compute_grad_requirements(transcripts):
                         tempkid[i] = str(course_grade)
                 except ValueError:
                     tempkid[i] = 'NG X'
-        # for i in range(len(possible_classes)):
-        #     pci = possible_classes[i]
-        #     for c in possible_classes:
-        #         tempclass = c
-        #         testvar = kid[2:]
-        #         if c in tempcourses:
-        #             tempkid[i] = '✓ ' + tempcourses[c]['grade']
-        # print(tempkid)
         all_kids.append(tempkid)
     all_kids.insert(0, possible_classes)
     csv_writer(all_kids, 'first draft of credit mail merge thing.csv')
